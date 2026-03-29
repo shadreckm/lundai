@@ -10,7 +10,7 @@ async function testConnection() {
   });
 
   try {
-    console.log("Connecting to:", process.env.DATABASE_URL);
+    console.log("Connecting to Database...");
     await client.connect();
     console.log("Connected successfully!");
     const res = await client.query('SELECT NOW()');

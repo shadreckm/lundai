@@ -13,6 +13,7 @@ export interface PaymentCheckoutInput {
   customerPhone?: string;
   returnUrl?: string;
   cancelUrl?: string;
+  intent?: "deposit" | "subscription";
 }
 
 export interface PaymentCheckoutResult {
@@ -53,12 +54,13 @@ export class PaymentService {
           return_url: input.returnUrl || `${process.env.APP_URL}/payment/success`,
           tx_ref: txRef,
           customization: {
-            title: "LUNDAI Housing Deposit",
-            description: `Booking deposit for: ${input.propertyTitle}`,
+            title: input.intent === "subscription" ? "LUNDAI Agent Pro" : "LUNDAI Housing Deposit",
+            description: input.intent === "subscription" ? "Monthly subscription to Agent Pro" : `Booking deposit for: ${input.propertyTitle}`,
           },
           meta: {
-            property_id: input.propertyId,
+            property_id: input.propertyId || "n/a",
             user_id: input.userId,
+            intent: input.intent || "deposit"
           },
         },
         {

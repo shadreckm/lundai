@@ -74,10 +74,6 @@ export default function HomePage() {
             {" "}in Malawi
           </h1>
 
-          <div style={{ fontSize: "1.2rem", fontWeight: 600, color: "var(--color-primary-light)", marginBottom: "16px", animation: "fadeUp 0.6s 0.15s ease both" }}>
-            Welcome to LUNDAI — helping you find a home in the <span style={{ color: "var(--color-amber)" }}>Warm Heart of Africa</span>. 🇲🇼
-          </div>
-
           <p style={{ fontSize: "1.15rem", color: "var(--color-foreground-muted)", maxWidth: "560px", marginBottom: "48px", lineHeight: 1.7, animation: "fadeUp 0.6s 0.2s ease both" }}>
             LUNDAI uses AI to match you with verified, affordable rooms near your university. No more unsafe listings — just results that fit your real needs.
           </p>

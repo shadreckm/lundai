@@ -1,5 +1,8 @@
 import { Router, type Request, type Response } from "express";
 import { PaymentService } from "../services/paymentService.js";
+import getDb from "../db/index.js";
+import { users } from "../db/schema.js";
+import { eq } from "drizzle-orm";
 
 const router = Router();
 
@@ -41,7 +44,26 @@ router.post("/callback", async (req: Request, res: Response) => {
   try {
     const { tx_ref, status } = req.body;
     console.log(`Payment callback: txRef=${tx_ref}, status=${status}`);
-    // TODO: update transaction record in DB
+    
+    // In a real scenario, we verify this with the payment provider here.
+    if (status === "success" || status === "successful") {
+       const verified = await PaymentService.verifyPayment(tx_ref);
+       
+       if (verified?.meta?.intent === "subscription" && verified?.meta?.user_id) {
+         const db = getDb();
+         if (db) {
+            await db.update(users)
+              .set({
+                 subscriptionStatus: "agent_pro",
+                 subscriptionPlan: "agent_pro",
+                 subscriptionStart: new Date(),
+              })
+              .where(eq(users.id, verified.meta.user_id));
+            console.log(`✅ Upgraded ${verified.meta.user_id} to Agent Pro`);
+         }
+       }
+    }
+    
     res.json({ received: true });
   } catch (err: any) {
     res.status(500).json({ error: "Callback processing failed" });

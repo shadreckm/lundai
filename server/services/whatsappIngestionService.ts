@@ -1,5 +1,6 @@
-import { AiSearchService } from "./aiSearchService.js";
+import { GoogleGenAI } from "@google/genai";
 import { ListingDiscoveryService } from "./listingDiscoveryService.js";
+import { DuplicateDetectionService } from "./duplicateDetection.js";
 
 interface WhatsAppMessage {
   from: string;
@@ -53,14 +54,35 @@ Our AI will extract the details automatically! 🤖`;
       };
     }
 
-    // Try to extract listing from natural language
-    const extracted = await this.extractListingData(msg.body);
+    // Try to extract listing using Gemini
+    let extracted: ExtractedListing = {};
+    try {
+      extracted = await this.extractListingData(msg.body);
+    } catch (e) {
+      console.error("Gemini AI extracted failed, falling back to basic checks.", e);
+      extracted = this.fallbackExtraction(msg.body);
+    }
+
+    // Duplicate Detection
+    if (extracted.price && extracted.city) {
+      const isDuplicate = await DuplicateDetectionService.checkDuplicateListing(
+        msg.from,
+        extracted.city,
+        extracted.price
+      );
+
+      if (isDuplicate) {
+        return {
+          replyMessage: `⚠️ *Duplicate Listing Detected*\n\nIt looks like you've recently uploaded a similar listing in ${extracted.city} for ${extracted.price} MWK. To prevent spam, this listing has been paused. Contact support if this is a mistake.`,
+          action: "duplicate",
+        };
+      }
+    }
 
     if (extracted.title || extracted.description) {
       try {
-        // Auto-create a pending listing
         const listing = await ListingDiscoveryService.createListing({
-          landlordId: "whatsapp-" + msg.from.replace(/\D/g, ""),
+          landlordId: "whatsapp-" + msg.from.replace(/\D/g, ""), // Dummy UUID or parsed ID
           title: extracted.title || "Property from WhatsApp",
           description: extracted.description || msg.body,
           type: (extracted.type as any) || "room",
@@ -82,8 +104,7 @@ Our AI will extract the details automatically! 🤖`;
           status: "pending",
           viewCount: 0,
           isVerified: false,
-          createdAt: new Date(),
-          updatedAt: new Date(),
+          contactPhone: msg.from,
         });
 
         return {
@@ -104,9 +125,44 @@ Our AI will extract the details automatically! 🤖`;
   }
 
   private static async extractListingData(text: string): Promise<ExtractedListing> {
+    if (!process.env.GEMINI_API_KEY) throw new Error("GEMINI_API_KEY missing");
+
+    const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+
+    const prompt = `
+      Extract student housing property details from the following Malawian WhatsApp message.
+      Return valid JSON with these optional keys:
+      {
+        "title": "String (catchy headline <= 80 chars)",
+        "description": "String (full description)",
+        "city": "String (Zomba, Blantyre, Lilongwe, Mzuzu, etc)",
+        "address": "String (Neighborhood or exact street)",
+        "price": "String (number only, remove MWK or K)",
+        "type": "String (room, apartment, hostel, studio, shared)",
+        "bedrooms": number,
+        "isFurnished": boolean,
+        "amenities": ["WiFi", "Generator", "Security", "Borehole Water"] // array of obvious amenities
+      }
+      If a field is unknown, omit it. Do not include markdown formatting like \`\`\`json.
+      
+      Message: "${text}"
+    `;
+
+    const response = await genAI.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: prompt,
+    });
+
+    const output = response.text || "";
+    // Clean potential markdown blocks
+    const cleaned = output.replace(/```json/g, "").replace(/```/g, "").trim();
+    
+    return JSON.parse(cleaned) as ExtractedListing;
+  }
+
+  private static fallbackExtraction(text: string): ExtractedListing {
     const result: ExtractedListing = {};
 
-    // Simple regex-based extraction as fallback (no AI needed)
     const priceMatch = text.match(/(\d[\d,]*)\s*(?:MWK|kwacha|K|per month|\/month)/i);
     if (priceMatch) result.price = priceMatch[1].replace(/,/g, "");
 
@@ -123,9 +179,6 @@ Our AI will extract the details automatically! 🤖`;
     if (/generator/i.test(text)) {
       result.amenities = [...(result.amenities || []), "Generator"];
     }
-    if (/security/i.test(text)) {
-      result.amenities = [...(result.amenities || []), "Security"];
-    }
 
     if (/studio/i.test(text)) result.type = "studio";
     else if (/apartment|flat/i.test(text)) result.type = "apartment";
@@ -133,7 +186,6 @@ Our AI will extract the details automatically! 🤖`;
     else if (/shared/i.test(text)) result.type = "shared";
     else result.type = "room";
 
-    // Use first 100 chars as title basis
     const firstLine = text.split(/[.\n]/)[0].trim();
     result.title = firstLine.length > 10 ? firstLine.substring(0, 80) : "Property Listing";
     result.description = text;

@@ -1,9 +1,10 @@
 import { pgTable, uuid, text, integer, numeric, boolean, timestamp, jsonb, pgEnum } from "drizzle-orm/pg-core";
 
 // ── Enums ────────────────────────────────────────────────────────────────────
-export const userRoleEnum = pgEnum("user_role", ["student", "landlord", "admin"]);
+export const userRoleEnum = pgEnum("user_role", ["student", "landlord", "agent", "admin"]);
 export const propertyTypeEnum = pgEnum("property_type", ["room", "apartment", "hostel", "studio", "shared"]);
 export const propertyStatusEnum = pgEnum("property_status", ["pending", "active", "inactive", "rejected"]);
+export const propertySourceEnum = pgEnum("property_source", ["manual", "whatsapp", "facebook", "scraped"]);
 export const inquiryStatusEnum = pgEnum("inquiry_status", ["open", "replied", "closed"]);
 export const transactionStatusEnum = pgEnum("transaction_status", ["pending", "completed", "failed", "refunded"]);
 export const whatsappStatusEnum = pgEnum("whatsapp_status", ["received", "processed", "failed"]);
@@ -19,6 +20,16 @@ export const users = pgTable("users", {
   avatarUrl: text("avatar_url"),
   isVerified: boolean("is_verified").notNull().default(false),
   verificationToken: text("verification_token"),
+  // Agent specific
+  agentVerified: boolean("agent_verified").notNull().default(false),
+  agencyName: text("agency_name"),
+  licenseNumber: text("license_number"),
+  verificationBadge: boolean("verification_badge").notNull().default(false),
+  // Subscription / Monetization
+  subscriptionStatus: text("subscription_status").notNull().default("none"),
+  subscriptionPlan: text("subscription_plan").notNull().default("free"),
+  subscriptionStart: timestamp("subscription_start"),
+  subscriptionEnd: timestamp("subscription_end"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
@@ -47,6 +58,11 @@ export const properties = pgTable("properties", {
   viewCount: integer("view_count").notNull().default(0),
   nearbyUniversities: jsonb("nearby_universities").$type<string[]>().default([]),
   aiSummary: text("ai_summary"),
+  // Acquisition / Agent fields
+  agentId: uuid("agent_id").references(() => users.id, { onDelete: "set null" }),
+  source: propertySourceEnum("source").notNull().default("manual"),
+  externalId: text("external_id"),
+  contactPhone: text("contact_phone"),
   whatsappSourceId: uuid("whatsapp_source_id"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
